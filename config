@@ -1,0 +1,10 @@
+[database]
+server = 127.0.0.1
+username = zomato
+password = zomato
+dbname = zomato_geoip
+
+[paths]
+base_directory = /Users/zomato/tw/
+relative_citiesCSV = testdata/cities.csv
+relative_configFilesFormat = testdata/access.log.*.gz
