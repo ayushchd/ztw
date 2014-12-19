@@ -12,27 +12,26 @@ from time import mktime
 from datetime import datetime
 import gzip
 import glob
+import sys
+from ConfigParser import RawConfigParser
 
 class Verifier:
 
 	def __init__(self):
-		self.baseDir = "/Users/zomato/tw/"
+		self.config = RawConfigParser()
+		self.config.read("config")
+		self.baseDir = self.config.get("paths", "base_directory")
 		self.citiesDict = {}
-		self.db = MySQLdb.connect("localhost", "zomato", "zomato", "zomato_geoip")
-		self.cursor = self.db.cursor(MySQLdb.cursors.DictCursor)
-		self.cursor.execute("SELECT timestamp FROM latest_timestamp LIMIT 1")
-		self.latestTimestamp = self.cursor.fetchone()['timestamp']
-		self.newTimestamp = self.latestTimestamp
-		self.batchSize = 300
+		self.db = MySQLdb.connect(self.config.get("database", "server"), self.config.get("database", "username"), self.config.get("database", "password"), self.config.get("database", "dbname"))
 
 	def loadCities(self):
-		with open(os.path.join(self.baseDir, "cities.csv")) as f:
+		with open(os.path.join(self.baseDir, self.config.get("paths", "relative_citiesCSV"))) as f:
 			creader = csv.reader(f)
 			for row in creader:
 				self.citiesDict[row[2][:-1]] = row[0]
 
 	def parseLog(self, fname):
-		
+		cursor = self.db.cursor(MySQLdb.cursors.DictCursor)
 		DateRegEx = re.compile(r'\[(\d{1,2}\/[a-zA-Z]{3}\/\d{4}:\d{2}:\d{2}:\d{2})\s[+-]\d{4}\]')
 		IPRegEx = re.compile(r'\s((\d{0,3}\.){3}\d{0,3})\s')
 		URLRegEx = re.compile(r'(GET|POST)\s/(.*?)/')
@@ -58,16 +57,14 @@ class Verifier:
 				continue
 			if url in self.citiesDict:
 				if ipBlock not in memo:
-					self.cursor.execute("SELECT city_1, city_2, city_3 FROM geoip_mapping WHERE ip_block=%s", (ipBlock,))
-					rows = self.cursor.fetchall()
+					cursor.execute("SELECT city_1, city_2, city_3 FROM geoip_mapping WHERE ip_block=%s", (ipBlock,))
+					rows = cursor.fetchall()
 					if len(rows) > 0:
 						ct = rows[0]['city_1']
 						memo[ipBlock] = ct
 				vc += 1
 				# print ipBlock
 				if ipBlock in memo:
-					print self.citiesDict[url]
-					print memo[ipBlock]
 					if int(self.citiesDict[url]) == memo[ipBlock]:
 						t += 1
 					else:
@@ -75,7 +72,10 @@ class Verifier:
 				else:
 					nf += 1
 					print "fallback"
-				print "======",t,f,nf,vc
+				print "======================"
+				print "True: " + str(t)
+				print "False: " + str(f)
+				print "Not Found: " + str(nf)
 				self.db.commit()
 		fl.close()
 		
@@ -83,4 +83,4 @@ class Verifier:
 if __name__ == "__main__":
 	v = Verifier()
 	v.loadCities()
-	v.parseLog(v.baseDir + "logs/access.log.13.gz")
+	v.parseLog(v.baseDir + sys.argv[1])
